@@ -96,6 +96,7 @@ fun GameScreen(vm: AppVm) {
     }
 
     fun dropHand(c: Card, p: Offset) {
+        android.util.Log.d("DurakUI", "drop $c at $p table=$tableZone targets=${targets.toMap()} defend=${l.defend}")
         if (v.gameOver) return
         val inTable = tableZone.contains(p)
         if (iAmDefender) {
@@ -128,6 +129,7 @@ fun GameScreen(vm: AppVm) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = true)
             val card = hitTest(down.position)
+            android.util.Log.d("DurakUI", "down at ${down.position} -> $card")
             if (card == null) {
                 val up = waitForUpOrCancellation()
                 if (up != null && (up.position - down.position).getDistance() < viewConfiguration.touchSlop) onTapTable(up.position)
@@ -140,6 +142,7 @@ fun GameScreen(vm: AppVm) {
                 val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
                 val delta = ch.position - down.position
                 if (!ch.pressed) {
+                    android.util.Log.d("DurakUI", "up at ${ch.position} dragging=$dragging")
                     if (dragging) onDrop(card, ch.position) else onTapHand(card)
                     break
                 }

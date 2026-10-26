@@ -41,7 +41,7 @@ jobs:
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             adb shell am instrument -w ru.durak.offline.test/androidx.test.runner.AndroidJUnitRunner > instrument.log 2>&1 || true
-            adb logcat -d -s Playthrough:I AndroidRuntime:E TestRunner:* > logcat.log || true
+            adb logcat -d -s Playthrough:I AndroidRuntime:E TestRunner:* DurakUI:D > logcat.log || true
             adb pull /sdcard/Android/data/ru.durak.offline/files/shots shots || true
       - name: Save logs and screenshots to ci-logs branch
         if: always()

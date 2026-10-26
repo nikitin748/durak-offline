@@ -77,7 +77,7 @@ class PlaythroughTest {
                 l.defend.isNotEmpty() -> {
                     val idx = v.table.indexOfFirst { p -> p.defense == null && l.defend.any { it.index == v.table.indexOf(p) } }
                     val opt = l.defend.filter { it.index == idx }.minBy { it.card.rank + if (it.card.suit == v.trump) 100 else 0 }
-                    val useDrag = defendsByDrag < 3 && steps % 2 == 0
+                    val useDrag = defendsByTap >= 1 && defendsByDrag < 3 && steps % 2 == 0
                     if (useDrag) { dragCardTo(opt.card, "attack:$idx"); defendsByDrag++ }
                     else {
                         tapCard(opt.card)
