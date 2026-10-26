@@ -150,9 +150,9 @@ fun HostLobbyScreen(vm: AppVm) {
             Panel(Modifier.fillMaxWidth()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Мест: ${vm.seatCount}", color = Color.White, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
-                    SmallBtn("−") { if (vm.seatCount > 2) vm.setSeatCount(vm.seatCount - 1) }
+                    SmallBtn("−") { if (vm.seatCount > 2) vm.changeSeatCount(vm.seatCount - 1) }
                     Spacer(Modifier.width(8.dp))
-                    SmallBtn("+") { if (vm.seatCount < 6) vm.setSeatCount(vm.seatCount + 1) }
+                    SmallBtn("+") { if (vm.seatCount < 6) vm.changeSeatCount(vm.seatCount + 1) }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Переводной", color = Color.White, modifier = Modifier.weight(1f))

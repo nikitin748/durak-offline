@@ -92,7 +92,7 @@ class AppVm(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun setSeatCount(n: Int) { seatCount = n; session?.configure(n, rules) }
+    fun changeSeatCount(n: Int) { seatCount = n; session?.configure(n, rules) }
     fun setTransfer(on: Boolean) { rules = rules.copy(transfer = on); session?.configure(seatCount, rules) }
     fun addBot() { session?.addBot() }
     fun removeBot(seat: Int) { session?.removeBot(seat) }
