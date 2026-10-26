@@ -12,7 +12,7 @@ data class Rules(
 )
 
 @Serializable
-data class TablePair(val attack: Card, val defense: Card? = null)
+data class TablePair(val attack: Card, val defense: Card? = null, /** Seat that played the attack card. */ val attackBy: Int = -1)
 
 @Serializable
 sealed interface Action {

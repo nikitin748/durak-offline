@@ -106,7 +106,7 @@ class Game private constructor(
                 if (c !in hands[seat]) return Result.Error("Нет такой карты")
                 if (c !in attackCards(seat)) return Result.Error("Этой картой нельзя ходить")
                 hands[seat].remove(c)
-                table += TablePair(c)
+                table += TablePair(c, null, seat)
                 passed.clear()
             }
             is Action.Defend -> {
@@ -125,7 +125,7 @@ class Game private constructor(
                 if (action.card !in transferCards()) return Result.Error("Перевести нельзя")
                 val next = nextActive(defender)
                 hands[seat].remove(action.card)
-                table += TablePair(action.card)
+                table += TablePair(action.card, null, seat)
                 attacker = seat
                 defender = next
                 passed.clear()

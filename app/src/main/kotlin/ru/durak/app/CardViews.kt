@@ -1,6 +1,7 @@
 package ru.durak.app
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -9,90 +10,154 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import ru.durak.engine.Card
 import ru.durak.engine.Suit
 
-const val CARD_RATIO = 1.42f
+const val CARD_RATIO = 1.45f
 
 fun suitColor(s: Suit) = if (s == Suit.HEARTS || s == Suit.DIAMONDS) Pal.Red else Pal.Ink
 
+/** Pip positions (x, y in 0..1) for number cards, like a real deck. */
+private val PIPS: Map<Int, List<Pair<Float, Float>>> = run {
+    val col6 = listOf(0f to 0f, 0f to .5f, 0f to 1f, 1f to 0f, 1f to .5f, 1f to 1f)
+    val col8 = listOf(0f to 0f, 0f to .333f, 0f to .667f, 0f to 1f, 1f to 0f, 1f to .333f, 1f to .667f, 1f to 1f)
+    mapOf(
+        6 to col6,
+        7 to col6 + (.5f to .25f),
+        8 to col6 + (.5f to .25f) + (.5f to .75f),
+        9 to col8 + (.5f to .5f),
+        10 to col8 + (.5f to .17f) + (.5f to .83f),
+    )
+}
+
+private val COURT = mapOf(11 to "💂", 12 to "👸", 13 to "🤴")
+private val COURT_BG = mapOf(
+    11 to listOf(Color(0xFFFFF1C1), Color(0xFFF7C66B)),
+    12 to listOf(Color(0xFFFFE3E8), Color(0xFFF59AAE)),
+    13 to listOf(Color(0xFFE3EEFF), Color(0xFF8DB4F2)),
+)
+
 @Composable
-fun CardFace(card: Card, width: Dp, modifier: Modifier = Modifier, dim: Boolean = false, glow: Boolean = false) {
+fun CardFace(card: Card, width: Dp, modifier: Modifier = Modifier, dim: Boolean = false, glow: Float = 0f) {
     val h = width * CARD_RATIO
     val c = suitColor(card.suit)
-    val shape = RoundedCornerShape(width * 0.09f)
+    val shape = RoundedCornerShape(width * 0.1f)
+    val w = width.value
     Box(
         modifier
             .size(width, h)
-            .shadow(3.dp, shape)
+            .shadow(4.dp, shape)
             .clip(shape)
-            .background(Pal.Paper)
-            .border(if (glow) 2.5.dp else 0.8.dp, if (glow) Pal.Gold else Color(0xFFB8B8B0), shape)
+            .background(Brush.verticalGradient(listOf(Color.White, Pal.Paper)))
+            .border(if (glow > 0f) 3.dp else 0.7.dp, if (glow > 0f) Pal.Gold.copy(alpha = glow) else Color(0xFFBDBDB5), shape)
     ) {
-        // corner index
-        Column(Modifier.align(Alignment.TopStart).padding(start = width * 0.07f, top = width * 0.04f), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(card.rankLabel, color = c, fontSize = (width.value * 0.30f).sp, fontWeight = FontWeight.Bold, lineHeight = (width.value * 0.32f).sp)
-            Text(card.suit.symbol, color = c, fontSize = (width.value * 0.26f).sp, lineHeight = (width.value * 0.26f).sp)
-        }
-        // big center mark
-        if (card.rank >= 11) {
-            Box(
-                Modifier.align(Alignment.Center).padding(top = width * 0.1f, start = width * 0.12f).size(width * 0.56f, h * 0.5f)
-                    .border(1.2.dp, c.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
-                    .background(c.copy(alpha = 0.07f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    when (card.rank) { 11 -> "В"; 12 -> "Д"; 13 -> "К"; else -> "Т" },
-                    color = c, fontSize = (width.value * 0.42f).sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center,
-                )
+        // corner indexes
+        CornerIndex(card, c, w, Modifier.align(Alignment.TopStart).padding(start = width * 0.05f, top = width * 0.03f))
+        CornerIndex(card, c, w, Modifier.align(Alignment.BottomEnd).padding(end = width * 0.05f, bottom = width * 0.03f).rotate(180f))
+
+        val inner = Modifier.fillMaxSize().padding(horizontal = width * 0.24f, vertical = h * 0.15f)
+        when {
+            card.rank == 14 -> Box(inner, contentAlignment = Alignment.Center) {
+                Canvas(Modifier.size(width * 0.62f)) {
+                    drawCircle(c.copy(alpha = 0.10f))
+                    drawCircle(c.copy(alpha = 0.45f), style = Stroke(width = 2f))
+                }
+                Text(card.suit.symbol, color = c, fontSize = (w * 0.56f).sp)
             }
-            Text(card.suit.symbol, color = c, fontSize = (width.value * 0.34f).sp, modifier = Modifier.align(Alignment.BottomEnd).padding(end = width * 0.07f, bottom = width * 0.02f))
-        } else {
-            Text(card.suit.symbol, color = c, fontSize = (width.value * 0.62f).sp, modifier = Modifier.align(Alignment.Center).padding(top = width * 0.12f, start = width * 0.1f))
+            card.rank >= 11 -> Box(
+                Modifier.fillMaxSize().padding(horizontal = width * 0.18f, vertical = h * 0.15f).clip(RoundedCornerShape(width * 0.05f))
+                    .background(Brush.verticalGradient(COURT_BG.getValue(card.rank)))
+                    .border(1.5.dp, c.copy(alpha = 0.7f), RoundedCornerShape(width * 0.05f)),
+            ) {
+                Text(card.suit.symbol, color = c, fontSize = (w * 0.18f).sp, modifier = Modifier.align(Alignment.TopStart).padding(start = 3.dp))
+                Text(COURT.getValue(card.rank), fontSize = (w * 0.38f).sp, modifier = Modifier.align(Alignment.Center))
+                Text(card.suit.symbol, color = c, fontSize = (w * 0.18f).sp, modifier = Modifier.align(Alignment.BottomEnd).padding(end = 3.dp).rotate(180f))
+            }
+            else -> Box(inner) {
+                for ((x, y) in PIPS.getValue(card.rank)) {
+                    Text(
+                        card.suit.symbol, color = c, fontSize = (w * 0.20f).sp,
+                        modifier = Modifier.align(BiasAlignment(x * 2 - 1, y * 2 - 1)).then(if (y > 0.55f) Modifier.rotate(180f) else Modifier),
+                    )
+                }
+            }
         }
-        if (dim) Box(Modifier.matchParentSize().background(Color(0x33000000)))
+        if (dim) Box(Modifier.matchParentSize().background(Color(0x40000000)))
+    }
+}
+
+@Composable
+private fun CornerIndex(card: Card, c: Color, w: Float, modifier: Modifier) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            card.rankLabel, color = c, fontSize = (w * if (card.rank == 10) 0.22f else 0.26f).sp, fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Serif, lineHeight = (w * 0.26f).sp,
+        )
+        Text(card.suit.symbol, color = c, fontSize = (w * 0.18f).sp, lineHeight = (w * 0.18f).sp)
     }
 }
 
 @Composable
 fun CardBack(width: Dp, modifier: Modifier = Modifier) {
     val h = width * CARD_RATIO
-    val shape = RoundedCornerShape(width * 0.09f)
-    Box(modifier.size(width, h).shadow(2.dp, shape).clip(shape).background(Pal.Paper).padding(width * 0.06f)) {
-        Canvas(Modifier.matchParentSize().clip(RoundedCornerShape(width * 0.05f)).background(Color(0xFF244E92))) {
-            val step = size.width / 5f
-            var y = 0f
-            var row = 0
-            while (y < size.height + step) {
-                var x = if (row % 2 == 0) 0f else step / 2
-                while (x < size.width + step) {
-                    drawRect(Color(0x55FFFFFF), topLeft = Offset(x - 2f, y - 2f), size = Size(4f, 4f))
-                    x += step
-                }
-                y += step / 2
-                row++
+    val shape = RoundedCornerShape(width * 0.1f)
+    Box(modifier.size(width, h).shadow(2.dp, shape).clip(shape).background(Color.White).padding(width * 0.06f)) {
+        Canvas(Modifier.matchParentSize().clip(RoundedCornerShape(width * 0.06f)).background(Color(0xFF2556A0))) {
+            val step = size.width / 4f
+            val line = Color(0x40FFFFFF)
+            var x = -size.height
+            while (x < size.width + size.height) {
+                drawLine(line, Offset(x, 0f), Offset(x + size.height, size.height), strokeWidth = 1.5f)
+                drawLine(line, Offset(x + size.height, 0f), Offset(x, size.height), strokeWidth = 1.5f)
+                x += step
             }
+            // central medallion
+            val p = Path().apply {
+                moveTo(size.width / 2, size.height * 0.3f); lineTo(size.width * 0.78f, size.height / 2)
+                lineTo(size.width / 2, size.height * 0.7f); lineTo(size.width * 0.22f, size.height / 2); close()
+            }
+            drawPath(p, Color(0xFFC8102E))
+            drawPath(p, Color.White, style = Stroke(width = 2f))
         }
     }
 }
 
-/** Little pop-in animation when a card first appears on the table. */
+/**
+ * Entrance animation: the card flies in from ([fromX], [fromY]) px with a little spin, then settles.
+ * Runs once, when the composable first appears.
+ */
 @Composable
-fun Pop(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+fun Pop(modifier: Modifier = Modifier, fromX: Float = 0f, fromY: Float = 0f, delayMs: Long = 0, content: @Composable () -> Unit) {
     val a = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { a.animateTo(1f, androidx.compose.animation.core.spring(0.55f, 380f)) }
-    Box(modifier.graphicsLayer { scaleX = 0.6f + 0.4f * a.value; scaleY = 0.6f + 0.4f * a.value; alpha = a.value.coerceIn(0f, 1f) }) { content() }
+    LaunchedEffect(Unit) {
+        if (delayMs > 0) delay(delayMs)
+        a.animateTo(1f, spring(dampingRatio = 0.75f, stiffness = 260f))
+    }
+    Box(
+        modifier.graphicsLayer {
+            val k = 1f - a.value
+            translationX = fromX * k; translationY = fromY * k
+            rotationZ = -18f * k
+            val s = 0.75f + 0.25f * a.value
+            scaleX = s; scaleY = s
+            alpha = (a.value * 2.5f).coerceIn(0f, 1f)
+        }
+    ) { content() }
 }
