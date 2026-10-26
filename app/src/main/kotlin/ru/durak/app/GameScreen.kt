@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -57,11 +58,10 @@ fun GameScreen(vm: AppVm) {
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
     var transferMode by remember { mutableStateOf(false) }
     val targets = remember { mutableStateMapOf<Int, Rect>() }  // attack cards on the table (root coords)
-    val handRects = remember { mutableStateMapOf<Card, Rect>() }
+    var handRects by remember { mutableStateOf<List<Pair<Card, Rect>>>(emptyList()) }
     var tableZone by remember { mutableStateOf(Rect.Zero) }
     LaunchedEffect(v.table.size, v.defender, v.turnNumber, v.table.count { it.defense != null }) { selected = null; transferMode = false }
     LaunchedEffect(v.table.size) { targets.keys.filter { it >= v.table.size }.forEach { targets.remove(it) } }
-    LaunchedEffect(hand) { handRects.keys.filter { it !in hand }.forEach { handRects.remove(it) } }
 
     fun info(seat: Int): SeatInfo = vm.seats.getOrNull(seat) ?: SeatInfo("?", 0, SeatKind.BOT)
     fun targetsFor(c: Card?) = if (c == null || !iAmDefender) emptySet() else l.defend.filter { it.card == c }.map { it.index }.toSet()
@@ -118,7 +118,7 @@ fun GameScreen(vm: AppVm) {
         if (!defendWith(c, hit)) vm.flash("Этой картой эту не побить")
     }
 
-    fun handHit(p: Offset): Card? = hand.lastOrNull { handRects[it]?.contains(p) == true }
+    fun handHit(p: Offset): Card? = handRects.lastOrNull { it.second.contains(p) }?.first
 
     // One gesture handler for the whole table: taps and drags of hand cards, taps on table cards.
     val onTapHand by rememberUpdatedState(::tapHand)
@@ -129,7 +129,7 @@ fun GameScreen(vm: AppVm) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = true)
             val card = hitTest(down.position)
-            android.util.Log.d("DurakUI", "down at ${down.position} -> $card")
+            android.util.Log.d("DurakUI", "down at ${down.position} -> $card rects=$handRects")
             if (card == null) {
                 val up = waitForUpOrCancellation()
                 if (up != null && (up.position - down.position).getDistance() < viewConfiguration.touchSlop) onTapTable(up.position)
@@ -177,7 +177,7 @@ fun GameScreen(vm: AppVm) {
             }
             // ---- table ----
             Box(Modifier.weight(1f).fillMaxWidth().onGloballyPositioned { tableZone = it.boundsInRoot() }) {
-                TalonView(v, Modifier.align(Alignment.CenterStart).offset(x = (-14).dp))
+                TalonView(v, Modifier.align(Alignment.CenterStart).padding(start = 4.dp))
                 TableView(v, glowSet, pulse, { i, r -> targets[i] = r }, ::originOf, Modifier.align(Alignment.Center))
                 Text(
                     hintText(v, me, ::info), color = Color.White, fontSize = 13.sp, textAlign = TextAlign.Center,
@@ -192,7 +192,7 @@ fun GameScreen(vm: AppVm) {
                 vm.toast?.let { Toast(it) }
             }
             // ---- my hand ----
-            HandView(v, hand, selected, transferMode, dragCard, dragOffset) { c, r -> handRects[c] = r }
+            HandView(v, hand, selected, transferMode, dragCard, dragOffset) { handRects = it }
             // ---- bottom bar: me + stickers ----
             Row(
                 Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color(0x00000000), Color(0x88000000)))).padding(horizontal = 8.dp, vertical = 6.dp),
@@ -365,17 +365,30 @@ fun TableView(
 @Composable
 fun HandView(
     v: GameView, cards: List<Card>, selected: Card?, transferMode: Boolean, dragCard: Card?, dragOffset: Offset,
-    onBounds: (Card, Rect) -> Unit,
+    onLayout: (List<Pair<Card, Rect>>) -> Unit,
 ) {
     val l = v.legal
     val anyPlayable = l.attack.isNotEmpty() || l.defend.isNotEmpty() || l.transfer.isNotEmpty()
-    BoxWithConstraints(Modifier.fillMaxWidth().height(158.dp)) {
+    val density = LocalDensity.current
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    BoxWithConstraints(Modifier.fillMaxWidth().height(158.dp).onGloballyPositioned { origin = it.positionInRoot() }) {
         val cw = 86.dp
         val n = cards.size
         val avail = maxWidth - cw - 10.dp
         val step = if (n <= 1) 0.dp else minOf(cw * 0.62f, avail / (n - 1))
         val total = step * (n - 1) + cw
         val startX = (maxWidth - total) / 2
+        // Hit areas of the cards at their resting positions (for the table-wide gesture handler).
+        val rects = with(density) {
+            cards.mapIndexed { i, c ->
+                val t = if (n > 1) i / (n - 1f) - 0.5f else 0f
+                val x = (startX + step * i).toPx() + origin.x
+                val y = (22.dp + (t * t * 24f).dp - 12.dp).toPx() + origin.y
+                c to Rect(x, y, x + cw.toPx(), y + (cw * CARD_RATIO + 12.dp).toPx())
+            }
+        }
+        val reportLayout by rememberUpdatedState(onLayout)
+        LaunchedEffect(rects) { reportLayout(rects) }
         cards.forEachIndexed { i, c ->
             key(c) {
                 val t = if (n > 1) i / (n - 1f) - 0.5f else 0f
@@ -385,7 +398,6 @@ fun HandView(
                 val ay by animateDpAsState(22.dp + (t * t * 24f).dp - (if (c == selected) 28.dp else if (playable) 12.dp else 0.dp), label = "y")
                 Box(
                     Modifier.offset(x = ax, y = ay).zIndex(if (dragged) 10f else i.toFloat()).testTag("hand:$c")
-                        .onGloballyPositioned { onBounds(c, it.boundsInRoot()) }
                 ) {
                     Pop(fromX = -300f, fromY = -420f, delayMs = (i.coerceAtMost(8) * 70).toLong()) {
                         CardFace(

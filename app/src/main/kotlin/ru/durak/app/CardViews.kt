@@ -137,7 +137,7 @@ fun CardFace(card: Card, width: Dp, modifier: Modifier = Modifier, dim: Boolean 
     ) {
         when {
             card.rank >= 11 && card.rank <= 13 -> Box(
-                Modifier.fillMaxSize().padding(start = width * 0.2f, end = width * 0.2f, top = h * 0.11f, bottom = h * 0.11f)
+                Modifier.fillMaxSize().padding(start = width * 0.26f, end = width * 0.08f, top = h * 0.07f, bottom = h * 0.07f)
                     .clip(RoundedCornerShape(width * 0.04f))
                     .background(Brush.verticalGradient(COURT_BG.getValue(card.rank)))
                     .border(1.2.dp, c.copy(alpha = 0.8f), RoundedCornerShape(width * 0.04f)),
@@ -154,7 +154,7 @@ fun CardFace(card: Card, width: Dp, modifier: Modifier = Modifier, dim: Boolean 
                     drawSuit(card.suit, c, Offset((cw - s) / 2, (ch - s) / 2), s)
                 } else {
                     val pip = cw * 0.19f
-                    val left = cw * 0.34f; val right = cw * 0.66f; val top = ch * 0.2f; val bottom = ch * 0.8f
+                    val left = cw * 0.4f; val right = cw * 0.76f; val top = ch * 0.16f; val bottom = ch * 0.86f
                     for ((x, y) in PIPS.getValue(card.rank)) {
                         val cx = left + (right - left) * x; val cy = top + (bottom - top) * y
                         drawSuit(card.suit, c, Offset(cx - pip / 2, cy - pip / 2), pip)
@@ -163,7 +163,6 @@ fun CardFace(card: Card, width: Dp, modifier: Modifier = Modifier, dim: Boolean 
             }
         }
         CornerIndex(card, c, width, Modifier.align(Alignment.TopStart).padding(start = width * 0.045f, top = width * 0.03f))
-        CornerIndex(card, c, width, Modifier.align(Alignment.BottomEnd).padding(end = width * 0.045f, bottom = width * 0.03f).rotate(180f))
         if (dim) Box(Modifier.matchParentSize().background(Color(0x2E0A1A33)))
     }
 }
