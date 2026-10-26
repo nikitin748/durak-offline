@@ -48,6 +48,8 @@ class PlaythroughTest {
         catch (e: Throwable) { snap("FAIL_$what"); throw AssertionError("UI action had no effect: $what. view=${view()}", e) }
     }
 
+    private fun present(tag: String) = rule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
+
     private fun tapCard(c: Card) {
         rule.onNodeWithTag("hand:$c").performTouchInput { click(Offset(width * 0.15f, height * 0.3f)) }
     }
@@ -69,7 +71,9 @@ class PlaythroughTest {
         var defendsByTap = 0; var defendsByDrag = 0; var attacks = 0; var takes = 0; var passes = 0; var steps = 0
         while (true) {
             rule.waitUntil(60000) { myTurn(view()) }
+            rule.waitForIdle() // let the UI catch up with the state before acting on it
             val v = view()
+            if (!myTurn(v)) continue
             if (v.gameOver) break
             check(++steps < 500) { "game too long" }
             val l = v.legal
@@ -91,6 +95,7 @@ class PlaythroughTest {
                     if (defendsByTap + defendsByDrag <= 2) snap("${label}_defended")
                 }
                 l.canTake -> {
+                    if (!present("btn:take")) continue
                     rule.onNodeWithTag("btn:take").performClick(); takes++
                     waitChange(what = "take") { !it.legal.canTake }
                 }
@@ -102,6 +107,7 @@ class PlaythroughTest {
                     if (attacks <= 2) snap("${label}_attack")
                 }
                 l.canPass -> {
+                    if (!present("btn:pass")) continue
                     rule.onNodeWithTag("btn:pass").performClick(); passes++
                     waitChange(what = "pass") { !it.legal.canPass || it.table.isEmpty() }
                 }
