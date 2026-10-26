@@ -21,7 +21,16 @@ jobs:
       - name: Rules engine tests
         run: ./gradlew :engine:test --no-daemon
       - name: Build APK
-        run: ./gradlew :app:assembleDebug --no-daemon
+        run: ./gradlew :app:assembleDebug --no-daemon 2>&1 | tee build.log; test ${PIPESTATUS[0]} -eq 0
+        shell: bash
+      - name: Save build log to ci-logs branch
+        if: always()
+        run: |
+          git config user.name "ci"; git config user.email "ci@example.com"
+          mkdir /tmp/logs && cp build.log /tmp/logs/ 2>/dev/null || true
+          git checkout --orphan ci-logs && git rm -rf . -q && cp /tmp/logs/* . 2>/dev/null || true
+          git add build.log 2>/dev/null || true
+          git commit -m "build log" --allow-empty -q && git push -f origin ci-logs
       - name: Name the APK
         run: cp app/build/outputs/apk/debug/app-debug.apk durak-offline.apk
       - uses: actions/upload-artifact@v4
