@@ -6,13 +6,14 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
 
     <application
+        android:name="ru.durak.app.DurakApp"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="Дурак офлайн"
         android:usesCleartextTraffic="true"
         android:theme="@style/Theme.Durak">
         <activity
-            android:name=".MainActivity"
+            android:name="ru.durak.app.MainActivity"
             android:exported="true"
             android:screenOrientation="portrait"
             android:configChanges="orientation|screenSize|keyboardHidden">
