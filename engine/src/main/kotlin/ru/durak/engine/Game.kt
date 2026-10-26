@@ -203,7 +203,19 @@ class Game private constructor(
         passed = passed.toList(), finished = finishedOrder.toList(),
         loser = loser, gameOver = gameOver, turnNumber = turnNumber,
         waitingFor = waitingFor(),
+        legal = legalFor(seat),
     )
+
+    fun legalFor(seat: Int): Legal {
+        if (gameOver || !isActive(seat)) return Legal()
+        return if (seat == defender) Legal(
+            defend = defendOptions().map { DefendOption(it.first, it.second) },
+            transfer = transferCards(), canTake = canTake(),
+        ) else Legal(
+            attack = attackCards(seat),
+            canPass = table.isNotEmpty() && seat !in passed,
+        )
+    }
 
     companion object {
         fun newGame(playerCount: Int, rules: Rules = Rules(), random: Random = Random.Default, firstAttacker: Int? = null): Game {

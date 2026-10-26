@@ -28,6 +28,19 @@ sealed interface Action {
     @Serializable data object Pass : Action
 }
 
+@Serializable
+data class DefendOption(val index: Int, val card: Card)
+
+/** Moves currently legal for one seat, so a client UI can highlight cards without re-implementing rules. */
+@Serializable
+data class Legal(
+    val attack: List<Card> = emptyList(),
+    val defend: List<DefendOption> = emptyList(),
+    val transfer: List<Card> = emptyList(),
+    val canTake: Boolean = false,
+    val canPass: Boolean = false,
+)
+
 /** What the table looks like to one particular seat; safe to send over the network. */
 @Serializable
 data class GameView(
@@ -52,6 +65,7 @@ data class GameView(
     val turnNumber: Int,
     /** Seats whose input the game is waiting for. */
     val waitingFor: List<Int>,
+    val legal: Legal = Legal(),
 )
 
 sealed interface Result {
