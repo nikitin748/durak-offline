@@ -30,6 +30,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -69,10 +71,11 @@ fun GameScreen(vm: AppVm) {
     val gestures = Modifier.pointerInput(ui) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = true)
-            val card = ui.handHit(down.position)
+            val o = ui.feltOrigin
+            val card = ui.handHit(down.position + o)
             if (card == null) {
                 val up = waitForUpOrCancellation()
-                if (up != null && (up.position - down.position).getDistance() < viewConfiguration.touchSlop) ui.tapTable(up.position)
+                if (up != null && (up.position - down.position).getDistance() < viewConfiguration.touchSlop) ui.tapTable(up.position + o)
                 return@awaitEachGesture
             }
             down.consume()
@@ -82,7 +85,7 @@ fun GameScreen(vm: AppVm) {
                 val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
                 val delta = ch.position - down.position
                 if (!ch.pressed) {
-                    if (dragging) ui.dropHand(card, ch.position) else ui.tapHand(card)
+                    if (dragging) ui.dropHand(card, ch.position + o) else ui.tapHand(card)
                     break
                 }
                 if (!dragging && delta.getDistance() > viewConfiguration.touchSlop) { dragging = true; ui.dragCard = card }
@@ -103,7 +106,7 @@ fun GameScreen(vm: AppVm) {
     }
 
     Column(Modifier.fillMaxSize().background(Pal.Bar).systemBarsPadding()) {
-        Felt(Modifier.weight(1f).fillMaxWidth().then(gestures)) {
+        Felt(Modifier.weight(1f).fillMaxWidth().onGloballyPositioned { ui.feltOrigin = it.positionInRoot() }.then(gestures)) {
             Column(Modifier.fillMaxSize()) {
                 // ---- top: mode icons + coins, then opponents ----
                 Box(Modifier.fillMaxWidth().height(40.dp)) {
@@ -280,7 +283,7 @@ fun TalonView(v: GameView, modifier: Modifier = Modifier) {
         val tc = v.trumpCard
         if (tc != null) CardFace(tc, 64.dp, Modifier.align(Alignment.CenterStart).offset(x = (-8).dp, y = 22.dp).rotate(-80f))
         if (v.deckSize > 1) CardBack(64.dp, Modifier.align(Alignment.CenterStart).offset(x = (-40).dp).rotate(4f))
-        if (v.deckSize > 0) Text("${v.deckSize}", color = Color.White, fontSize = 40.sp, fontFamily = Condensed, modifier = Modifier.align(Alignment.TopStart).padding(start = 6.dp))
+        if (v.deckSize > 0) Text("${v.deckSize}", style = TextStyle(color = Color.White, fontSize = 40.sp, fontFamily = Condensed, shadow = Shadow(Color.Black, Offset(2f, 3f), 6f)), modifier = Modifier.align(Alignment.CenterStart).padding(start = 34.dp))
         else Box(Modifier.align(Alignment.CenterStart).padding(start = 6.dp).size(46.dp).clip(CircleShape).background(Color(0x55FFFFFF)), contentAlignment = Alignment.Center) {
             SuitIcon(v.trump, 28.dp)
         }
@@ -341,9 +344,9 @@ fun HandView(
     val density = LocalDensity.current
     var origin by remember { mutableStateOf(Offset.Zero) }
     BoxWithConstraints(Modifier.fillMaxWidth().height(132.dp).onGloballyPositioned { origin = it.positionInRoot() }) {
-        val cw = if (cards.size > 9) 96.dp else 112.dp
+        val cw = if (cards.size > 9) 90.dp else 104.dp
         val n = cards.size
-        val avail = maxWidth - cw - 6.dp
+        val avail = maxWidth - cw - 40.dp
         val step = if (n <= 1) 0.dp else minOf(cw * 0.6f, avail / (n - 1))
         val total = step * (n - 1) + cw
         val startX = (maxWidth - total) / 2
@@ -374,7 +377,7 @@ fun HandView(
                             c, cw,
                             Modifier.graphicsLayer {
                                 if (dragged) { translationX = dragOffset.x; translationY = dragOffset.y; scaleX = 0.8f; scaleY = 0.8f }
-                                else rotationZ = t * (if (n > 8) 10f else 7f)
+                                else rotationZ = t * (if (n > 8) 8f else 6f)
                                 transformOrigin = TransformOrigin(0.5f, 1.8f)
                             },
                             dim = anyPlayable && !playable && !dragged,
@@ -418,6 +421,8 @@ class GameUi(private val vm: AppVm) {
     val targets = mutableStateMapOf<Int, Rect>()
     var handRects: List<Pair<Card, Rect>> = emptyList()
     var tableZone: Rect = Rect.Zero
+    /** Root position of the felt; gesture positions are local to it. */
+    var feltOrigin: Offset = Offset.Zero
 
     private fun name(seat: Int) = vm.seats.getOrNull(seat)?.name ?: "?"
 
