@@ -53,87 +53,27 @@ fun GameScreen(vm: AppVm) {
     val l = v.legal
     val hand = handSorted(v.myHand, v.trump)
 
-    var selected by remember { mutableStateOf<Card?>(null) }   // card picked from hand (when it fits several targets)
-    var dragCard by remember { mutableStateOf<Card?>(null) }
-    var dragOffset by remember { mutableStateOf(Offset.Zero) }
-    var transferMode by remember { mutableStateOf(false) }
-    val targets = remember { mutableStateMapOf<Int, Rect>() }  // attack cards on the table (root coords)
-    var handRects by remember { mutableStateOf<List<Pair<Card, Rect>>>(emptyList()) }
-    var tableZone by remember { mutableStateOf(Rect.Zero) }
-    LaunchedEffect(v.table.size, v.defender, v.turnNumber, v.table.count { it.defense != null }) { selected = null; transferMode = false }
-    LaunchedEffect(v.table.size) { targets.keys.filter { it >= v.table.size }.forEach { targets.remove(it) } }
+    val ui = remember(vm) { GameUi(vm) }
+    var selected by ui::selected
+    val dragCard = ui.dragCard
+    val dragOffset = ui.dragOffset
+    var transferMode by ui::transferMode
+    val targets = ui.targets
+    LaunchedEffect(v.table.size, v.defender, v.turnNumber, v.table.count { it.defense != null }) { ui.selected = null; ui.transferMode = false }
+    LaunchedEffect(v.table.size) { ui.targets.keys.filter { it >= v.table.size }.forEach { ui.targets.remove(it) } }
 
     fun info(seat: Int): SeatInfo = vm.seats.getOrNull(seat) ?: SeatInfo("?", 0, SeatKind.BOT)
     fun targetsFor(c: Card?) = if (c == null || !iAmDefender) emptySet() else l.defend.filter { it.card == c }.map { it.index }.toSet()
 
-    fun defendWith(c: Card, index: Int?): Boolean {
-        val opts = l.defend.filter { it.card == c }
-        val pick = (if (index != null) opts.firstOrNull { it.index == index } else null) ?: opts.singleOrNull()
-        if (pick != null) { vm.act(Action.Defend(pick.index, pick.card)); selected = null; return true }
-        return false
-    }
-
-    fun tapHand(c: Card) {
-        android.util.Log.d("DurakUI", "tap $c me=$me def=${v.defender} turn=${v.turnNumber} table=${v.table} legal=$l")
-        if (v.gameOver) return
-        if (iAmDefender) {
-            if (c in l.transfer && (transferMode || l.defend.none { it.card == c })) { vm.act(Action.Transfer(c)); transferMode = false; return }
-            val opts = l.defend.filter { it.card == c }
-            when {
-                opts.isEmpty() -> vm.flash(if (l.defend.isEmpty() && l.canTake) "Отбиться нечем — нажмите «Беру»" else "Эта карта не бьёт")
-                opts.size == 1 -> defendWith(c, opts[0].index)
-                else -> selected = if (selected == c) null else c
-            }
-        } else {
-            if (c in l.attack) vm.act(Action.Attack(c))
-            else vm.flash(
-                when {
-                    v.table.isEmpty() && me != v.attacker -> "Сейчас ходит ${info(v.attacker).name}"
-                    v.table.isEmpty() -> "Ходите любой картой"
-                    else -> "Подкинуть можно карту того же достоинства, что на столе"
-                }
-            )
-        }
-    }
-
-    fun dropHand(c: Card, p: Offset) {
-        android.util.Log.d("DurakUI", "drop $c at $p table=$tableZone targets=${targets.toMap()} defend=${l.defend}")
-        if (v.gameOver) return
-        val inTable = tableZone.contains(p)
-        if (iAmDefender) {
-            val hit = targets.entries
-                .filter { (i, r) -> r.inflate(40f).contains(p) && l.defend.any { it.index == i && it.card == c } }
-                .minByOrNull { (it.value.center - p).getDistance() }?.key
-            if (hit != null) { defendWith(c, hit); return }
-            if (!inTable) return
-            if (c in l.transfer && (transferMode || l.defend.none { it.card == c })) { vm.act(Action.Transfer(c)); transferMode = false; return }
-            if (!defendWith(c, null)) {
-                if (l.defend.any { it.card == c }) selected = c else vm.flash("Эта карта не бьёт")
-            }
-        } else if (inTable) tapHand(c)
-    }
-
-    fun tapTable(p: Offset) {
-        val c = selected ?: return
-        val hit = targets.entries.firstOrNull { it.value.inflate(16f).contains(p) }?.key ?: return
-        if (!defendWith(c, hit)) vm.flash("Этой картой эту не побить")
-    }
-
-    fun handHit(p: Offset): Card? = handRects.lastOrNull { it.second.contains(p) }?.first
-
     // One gesture handler for the whole table: taps and drags of hand cards, taps on table cards.
-    val onTapHand by rememberUpdatedState(::tapHand)
-    val onDrop by rememberUpdatedState(::dropHand)
-    val onTapTable by rememberUpdatedState(::tapTable)
-    val hitTest by rememberUpdatedState(::handHit)
-    val gestures = Modifier.pointerInput(Unit) {
+    // It talks to [ui], which always reads the latest game state from the view model.
+    val gestures = Modifier.pointerInput(ui) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = true)
-            val card = hitTest(down.position)
-            android.util.Log.d("DurakUI", "down at ${down.position} -> $card rects=$handRects")
+            val card = ui.handHit(down.position)
             if (card == null) {
                 val up = waitForUpOrCancellation()
-                if (up != null && (up.position - down.position).getDistance() < viewConfiguration.touchSlop) onTapTable(up.position)
+                if (up != null && (up.position - down.position).getDistance() < viewConfiguration.touchSlop) ui.tapTable(up.position)
                 return@awaitEachGesture
             }
             down.consume()
@@ -143,14 +83,13 @@ fun GameScreen(vm: AppVm) {
                 val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
                 val delta = ch.position - down.position
                 if (!ch.pressed) {
-                    android.util.Log.d("DurakUI", "up at ${ch.position} dragging=$dragging")
-                    if (dragging) onDrop(card, ch.position) else onTapHand(card)
+                    if (dragging) ui.dropHand(card, ch.position) else ui.tapHand(card)
                     break
                 }
-                if (!dragging && delta.getDistance() > viewConfiguration.touchSlop) { dragging = true; dragCard = card }
-                if (dragging) { dragOffset = delta; ch.consume() }
+                if (!dragging && delta.getDistance() > viewConfiguration.touchSlop) { dragging = true; ui.dragCard = card }
+                if (dragging) { ui.dragOffset = delta; ch.consume() }
             }
-            dragCard = null; dragOffset = Offset.Zero
+            ui.dragCard = null; ui.dragOffset = Offset.Zero
         }
     }
 
@@ -177,11 +116,11 @@ fun GameScreen(vm: AppVm) {
                 CoinChip(vm.coins, Modifier.padding(top = 4.dp))
             }
             // ---- table ----
-            Box(Modifier.weight(1f).fillMaxWidth().onGloballyPositioned { tableZone = it.boundsInRoot() }) {
+            Box(Modifier.weight(1f).fillMaxWidth().onGloballyPositioned { ui.tableZone = it.boundsInRoot() }) {
                 TalonView(v, Modifier.align(Alignment.CenterStart).padding(start = 4.dp))
-                TableView(v, glowSet, pulse, { i, r -> targets[i] = r }, ::originOf, Modifier.align(Alignment.Center))
+                TableView(v, glowSet, pulse, { i, r -> ui.targets[i] = r }, { seat -> originOf(seat) }, Modifier.align(Alignment.Center))
                 Text(
-                    hintText(v, me, ::info), color = Color.White, fontSize = 13.sp, textAlign = TextAlign.Center,
+                    hintText(v, me) { info(it) }, color = Color.White, fontSize = 13.sp, textAlign = TextAlign.Center,
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = 2.dp).clip(RoundedCornerShape(12.dp))
                         .background(Color(0x66000000)).padding(horizontal = 12.dp, vertical = 4.dp),
                 )
@@ -193,7 +132,7 @@ fun GameScreen(vm: AppVm) {
                 vm.toast?.let { Toast(it) }
             }
             // ---- my hand ----
-            HandView(v, hand, selected, transferMode, dragCard, dragOffset) { handRects = it }
+            HandView(v, hand, selected, transferMode, dragCard, dragOffset) { ui.handRects = it }
             // ---- bottom bar: me + stickers ----
             Row(
                 Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color(0x00000000), Color(0x88000000)))).padding(horizontal = 8.dp, vertical = 6.dp),
@@ -215,7 +154,7 @@ fun GameScreen(vm: AppVm) {
                 }
             }
         }
-        if (v.gameOver) GameOver(v, ::info, vm)
+        if (v.gameOver) GameOver(v, { info(it) }, vm)
     }
 }
 
@@ -437,5 +376,76 @@ fun BoxScope.GameOver(v: GameView, info: (Int) -> SeatInfo, vm: AppVm) {
                 BigButton("В меню", { vm.leaveToMenu() }, Modifier.fillMaxWidth(), Color(0xFF52718F))
             }
         }
+    }
+}
+
+/** Interaction state of the game table. Handlers read the current state from [vm] at call time (never a stale snapshot). */
+class GameUi(private val vm: AppVm) {
+    var selected by mutableStateOf<Card?>(null)
+    var dragCard by mutableStateOf<Card?>(null)
+    var dragOffset by mutableStateOf(Offset.Zero)
+    var transferMode by mutableStateOf(false)
+    val targets = mutableStateMapOf<Int, Rect>()
+    var handRects: List<Pair<Card, Rect>> = emptyList()
+    var tableZone: Rect = Rect.Zero
+
+    private fun name(seat: Int) = vm.seats.getOrNull(seat)?.name ?: "?"
+
+    fun handHit(p: Offset): Card? = handRects.lastOrNull { it.second.contains(p) }?.first
+
+    private fun defendWith(v: GameView, c: Card, index: Int?): Boolean {
+        val opts = v.legal.defend.filter { it.card == c }
+        val pick = (if (index != null) opts.firstOrNull { it.index == index } else null) ?: opts.singleOrNull()
+        if (pick != null) { vm.act(Action.Defend(pick.index, pick.card)); selected = null; return true }
+        return false
+    }
+
+    fun tapHand(c: Card) {
+        val v = vm.view ?: return
+        if (v.gameOver) return
+        val l = v.legal
+        if (v.seat == v.defender) {
+            if (c in l.transfer && (transferMode || l.defend.none { it.card == c })) { vm.act(Action.Transfer(c)); transferMode = false; return }
+            val opts = l.defend.filter { it.card == c }
+            when {
+                opts.isEmpty() -> vm.flash(if (l.defend.isEmpty() && l.canTake) "Отбиться нечем — нажмите «Беру»" else "Эта карта не бьёт")
+                opts.size == 1 -> defendWith(v, c, opts[0].index)
+                else -> selected = if (selected == c) null else c
+            }
+        } else {
+            if (c in l.attack) vm.act(Action.Attack(c))
+            else vm.flash(
+                when {
+                    v.table.isEmpty() && v.seat != v.attacker -> "Сейчас ходит ${name(v.attacker)}"
+                    v.table.isEmpty() -> "Ходите любой картой"
+                    else -> "Подкинуть можно карту того же достоинства, что на столе"
+                }
+            )
+        }
+    }
+
+    fun dropHand(c: Card, p: Offset) {
+        val v = vm.view ?: return
+        if (v.gameOver) return
+        val l = v.legal
+        val inTable = tableZone.contains(p)
+        if (v.seat == v.defender) {
+            val hit = targets.entries
+                .filter { (i, r) -> r.inflate(40f).contains(p) && l.defend.any { it.index == i && it.card == c } }
+                .minByOrNull { (it.value.center - p).getDistance() }?.key
+            if (hit != null) { defendWith(v, c, hit); return }
+            if (!inTable) return
+            if (c in l.transfer && (transferMode || l.defend.none { it.card == c })) { vm.act(Action.Transfer(c)); transferMode = false; return }
+            if (!defendWith(v, c, null)) {
+                if (l.defend.any { it.card == c }) selected = c else vm.flash("Эта карта не бьёт")
+            }
+        } else if (inTable) tapHand(c)
+    }
+
+    fun tapTable(p: Offset) {
+        val v = vm.view ?: return
+        val c = selected ?: return
+        val hit = targets.entries.firstOrNull { it.value.inflate(16f).contains(p) }?.key ?: return
+        if (!defendWith(v, c, hit)) vm.flash("Этой картой эту не побить")
     }
 }
