@@ -160,7 +160,7 @@ class AppVm(app: Application) : AndroidViewModel(app) {
                         if (m.view.gameOver && (prev == null || !prev.gameOver)) payout(m.view)
                     }
                     is ServerMsg.Sticker -> addSticker(m.seat, m.id)
-                    is ServerMsg.Error -> flash(m.text)
+                    is ServerMsg.Error -> { android.util.Log.d("DurakUI", "server error ${m.text}"); flash(m.text) }
                     is ServerMsg.Closed -> { flash(m.reason); leaveToMenu() }
                 }
             }
@@ -174,7 +174,7 @@ class AppVm(app: Application) : AndroidViewModel(app) {
         saveCoins()
     }
 
-    fun act(a: Action) { conn?.send(ClientMsg.Act(a)) }
+    fun act(a: Action) { android.util.Log.d("DurakUI", "act $a conn=$conn"); conn?.send(ClientMsg.Act(a)) }
     fun sendSticker(id: Int) { conn?.send(ClientMsg.Sticker(id)) }
 
     private fun addSticker(seat: Int, id: Int) {

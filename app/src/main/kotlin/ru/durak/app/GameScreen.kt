@@ -74,6 +74,7 @@ fun GameScreen(vm: AppVm) {
     }
 
     fun tapHand(c: Card) {
+        android.util.Log.d("DurakUI", "tap $c me=$me def=${v.defender} turn=${v.turnNumber} table=${v.table} legal=$l")
         if (v.gameOver) return
         if (iAmDefender) {
             if (c in l.transfer && (transferMode || l.defend.none { it.card == c })) { vm.act(Action.Transfer(c)); transferMode = false; return }
