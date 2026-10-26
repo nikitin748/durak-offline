@@ -1,0 +1,37 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Rules engine tests
+        run: ./gradlew :engine:test --no-daemon
+      - name: Build APK
+        run: ./gradlew :app:assembleDebug --no-daemon
+      - name: Name the APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk durak-offline.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: durak-offline-apk
+          path: durak-offline.apk
+      - name: Publish as the "latest" release (stable download link)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest durak-offline.apk --title "Дурак офлайн (последняя сборка)" \
+            --notes "Скачай durak-offline.apk на телефон и установи (разреши установку из неизвестных источников)." --latest
