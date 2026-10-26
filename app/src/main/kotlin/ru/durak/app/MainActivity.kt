@@ -40,11 +40,10 @@ private fun MainActivity.showCrash(text: String) {
 
 @Composable
 fun Root(vm: AppVm) {
-    BackHandler(enabled = vm.screen != Screen.MENU) { vm.leaveToMenu() }
+    BackHandler(enabled = vm.screen != Screen.HOME) { vm.leaveToMenu() }
     when (vm.screen) {
-        Screen.MENU -> MenuScreen(vm)
+        Screen.HOME -> HomeScreen(vm)
         Screen.HOST_LOBBY -> HostLobbyScreen(vm)
-        Screen.FIND_ROOM -> FinderScreen(vm)
         Screen.CLIENT_LOBBY -> ClientLobbyScreen(vm)
         Screen.GAME -> GameScreen(vm)
     }

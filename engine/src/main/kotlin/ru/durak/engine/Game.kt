@@ -48,8 +48,14 @@ class Game private constructor(
 
     private fun tableRanks(): Set<Int> = table.flatMap { listOfNotNull(it.attack.rank, it.defense?.rank) }.toSet()
 
+    /** May [seat] throw in at all under the "соседи" rule? (The lead attacker always may.) */
+    private fun mayThrow(seat: Int): Boolean {
+        if (!rules.neighborsOnly || seat == attacker) return true
+        return seat == nextActive(defender) || seat == prevActive(defender)
+    }
+
     fun canThrow(seat: Int): Boolean {
-        if (gameOver || seat == defender || !isActive(seat) || table.isEmpty()) return false
+        if (gameOver || seat == defender || !isActive(seat) || table.isEmpty() || !mayThrow(seat)) return false
         if (!roomToAdd()) return false
         val ranks = tableRanks()
         return hands[seat].any { it.rank in ranks }
@@ -59,7 +65,7 @@ class Game private constructor(
     fun attackCards(seat: Int): List<Card> {
         if (gameOver || seat == defender || !isActive(seat)) return emptyList()
         if (table.isEmpty()) return if (seat == attacker) hand(seat) else emptyList()
-        if (!roomToAdd()) return emptyList()
+        if (!roomToAdd() || !mayThrow(seat)) return emptyList()
         val ranks = tableRanks()
         return hands[seat].filter { it.rank in ranks }
     }
@@ -182,6 +188,15 @@ class Game private constructor(
         defender = nextActive(attacker)
     }
 
+    private fun prevActive(from: Int): Int {
+        var s = (from - 1 + playerCount) % playerCount
+        repeat(playerCount) {
+            if (s !in finishedOrder && hands[s].isNotEmpty()) return s
+            s = (s - 1 + playerCount) % playerCount
+        }
+        return from
+    }
+
     private fun nextActive(from: Int): Int {
         var s = (from + 1) % playerCount
         repeat(playerCount) {
@@ -213,14 +228,14 @@ class Game private constructor(
             transfer = transferCards(), canTake = canTake(),
         ) else Legal(
             attack = attackCards(seat),
-            canPass = table.isNotEmpty() && seat !in passed,
+            canPass = table.isNotEmpty() && seat !in passed && mayThrow(seat),
         )
     }
 
     companion object {
         fun newGame(playerCount: Int, rules: Rules = Rules(), random: Random = Random.Default, firstAttacker: Int? = null): Game {
-            require(playerCount in 2..6) { "2..6 игроков" }
-            val cards = Deck.full36().shuffled(random)
+            require(playerCount in 2..Deck.maxPlayers(rules.deckSize)) { "слишком много игроков для колоды" }
+            val cards = Deck.of(rules.deckSize).shuffled(random)
             val trumpCard = cards.last() // bottom of the talon (with 6 players it ends up in the last hand)
             val hands = List(playerCount) { MutableList<Card>(0) { error("") } }
             val dq = ArrayDeque(cards)

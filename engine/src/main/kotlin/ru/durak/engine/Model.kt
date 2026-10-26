@@ -9,6 +9,10 @@ data class Rules(
     val handSize: Int = 6,
     /** Max attack cards in the very first turn of the game (classic: 5). */
     val firstTurnLimit: Int = 5,
+    /** 24, 36 or 52. */
+    val deckSize: Int = 36,
+    /** Only the defender's neighbours may throw in ("соседи"); otherwise everyone ("все"). */
+    val neighborsOnly: Boolean = false,
 )
 
 @Serializable

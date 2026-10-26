@@ -7,10 +7,10 @@ enum class Suit(val symbol: String) {
     SPADES("♠"), CLUBS("♣"), DIAMONDS("♦"), HEARTS("♥")
 }
 
-/** Rank 6..14 (11=В, 12=Д, 13=К, 14=Т). */
+/** Rank 2..14 (11=В, 12=Д, 13=К, 14=Т). */
 @Serializable
 data class Card(val suit: Suit, val rank: Int) {
-    init { require(rank in 6..14) { "rank $rank" } }
+    init { require(rank in 2..14) { "rank $rank" } }
 
     val rankLabel: String
         get() = when (rank) { 11 -> "В"; 12 -> "Д"; 13 -> "К"; 14 -> "Т"; else -> rank.toString() }
@@ -25,5 +25,14 @@ data class Card(val suit: Suit, val rank: Int) {
 }
 
 object Deck {
-    fun full36(): List<Card> = Suit.entries.flatMap { s -> (6..14).map { Card(s, it) } }
+    fun full36(): List<Card> = of(36)
+
+    /** 24 (9..A), 36 (6..A) or 52 (2..A) cards. */
+    fun of(size: Int): List<Card> {
+        val from = when (size) { 24 -> 9; 36 -> 6; 52 -> 2; else -> error("deck $size") }
+        return Suit.entries.flatMap { s -> (from..14).map { Card(s, it) } }
+    }
+
+    /** Most players a deck can deal six cards to. */
+    fun maxPlayers(size: Int) = minOf(6, size / 6)
 }

@@ -14,7 +14,7 @@ fun interface SeatLink { fun send(msg: ServerMsg) }
 class GameSession(
     private val scope: CoroutineScope,
     var roomName: String = "Дурак",
-    private val botDelayMs: LongRange = 700L..1400L,
+    var botDelayMs: LongRange = 700L..1400L,
     private val random: Random = Random.Default,
 ) {
     private val lock = Any()
@@ -62,7 +62,7 @@ class GameSession(
 
     fun configure(seatCount: Int, newRules: Rules) = synchronized(lock) {
         if (game != null) return@synchronized
-        require(seatCount in 2..6)
+        require(seatCount in 2..Deck.maxPlayers(newRules.deckSize))
         rules = newRules
         while (seats.size < seatCount) seats += SeatInfo()
         while (seats.size > seatCount) {

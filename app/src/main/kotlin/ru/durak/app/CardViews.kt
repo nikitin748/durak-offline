@@ -3,6 +3,10 @@ package ru.durak.app
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import ru.durak.offline.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -106,6 +110,10 @@ private val PIPS: Map<Int, List<Pair<Float, Float>>> = run {
     val col6 = listOf(0f to 0f, 0f to .5f, 0f to 1f, 1f to 0f, 1f to .5f, 1f to 1f)
     val col8 = listOf(0f to 0f, 0f to .333f, 0f to .667f, 0f to 1f, 1f to 0f, 1f to .333f, 1f to .667f, 1f to 1f)
     mapOf(
+        2 to listOf(.5f to 0f, .5f to 1f),
+        3 to listOf(.5f to 0f, .5f to .5f, .5f to 1f),
+        4 to listOf(0f to 0f, 1f to 0f, 0f to 1f, 1f to 1f),
+        5 to listOf(0f to 0f, 1f to 0f, .5f to .5f, 0f to 1f, 1f to 1f),
         6 to col6,
         7 to col6 + (.5f to .25f),
         8 to col6 + (.5f to .25f) + (.5f to .75f),
@@ -114,47 +122,40 @@ private val PIPS: Map<Int, List<Pair<Float, Float>>> = run {
     )
 }
 
-private val COURT = mapOf(11 to "💂", 12 to "👸", 13 to "🤴")
-private val COURT_BG = mapOf(
-    11 to listOf(Color(0xFFFFF4D2), Color(0xFFF5C25E)),
-    12 to listOf(Color(0xFFFFE6EC), Color(0xFFF08FA7)),
-    13 to listOf(Color(0xFFE6F0FF), Color(0xFF7FA8EE)),
-)
+private fun courtRes(c: Card): Int = when (c.rank) {
+    11 -> when (c.suit) { Suit.SPADES -> R.drawable.court_js; Suit.CLUBS -> R.drawable.court_jc; Suit.DIAMONDS -> R.drawable.court_jd; Suit.HEARTS -> R.drawable.court_jh }
+    12 -> when (c.suit) { Suit.SPADES -> R.drawable.court_qs; Suit.CLUBS -> R.drawable.court_qc; Suit.DIAMONDS -> R.drawable.court_qd; Suit.HEARTS -> R.drawable.court_qh }
+    else -> when (c.suit) { Suit.SPADES -> R.drawable.court_ks; Suit.CLUBS -> R.drawable.court_kc; Suit.DIAMONDS -> R.drawable.court_kd; Suit.HEARTS -> R.drawable.court_kh }
+}
+
+val Condensed = FontFamily(android.graphics.Typeface.create("sans-serif-condensed", android.graphics.Typeface.BOLD))
 
 @Composable
 fun CardFace(card: Card, width: Dp, modifier: Modifier = Modifier, dim: Boolean = false, glow: Float = 0f) {
     val h = width * CARD_RATIO
     val c = suitColor(card.suit)
-    val shape = RoundedCornerShape(width * 0.08f)
-    val w = width.value
+    val shape = RoundedCornerShape(width * 0.07f)
     Box(
         modifier
             .size(width, h)
             .shadow(5.dp, shape)
             .clip(shape)
             .background(Color.White)
-            .border(if (glow > 0f) 3.dp else 0.6.dp, if (glow > 0f) Pal.Gold.copy(alpha = glow) else Color(0xFFC9C9C2), shape)
+            .border(if (glow > 0f) 3.dp else 0.6.dp, if (glow > 0f) Pal.Gold.copy(alpha = glow) else Color(0xFFCFCFCA), shape)
     ) {
         when {
-            card.rank >= 11 && card.rank <= 13 -> Box(
-                Modifier.fillMaxSize().padding(start = width * 0.26f, end = width * 0.08f, top = h * 0.07f, bottom = h * 0.07f)
-                    .clip(RoundedCornerShape(width * 0.04f))
-                    .background(Brush.verticalGradient(COURT_BG.getValue(card.rank)))
-                    .border(1.2.dp, c.copy(alpha = 0.8f), RoundedCornerShape(width * 0.04f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(COURT.getValue(card.rank), fontSize = (w * 0.36f).sp)
-                SuitIcon(card.suit, width * 0.14f, Modifier.align(Alignment.TopEnd).padding(3.dp))
-                SuitIcon(card.suit, width * 0.14f, Modifier.align(Alignment.BottomStart).padding(3.dp).rotate(180f))
-            }
+            card.rank in 11..13 -> Image(
+                painterResource(courtRes(card)), contentDescription = null, contentScale = ContentScale.FillBounds,
+                modifier = Modifier.fillMaxSize().padding(start = width * 0.22f, top = width * 0.07f, end = width * 0.07f, bottom = width * 0.07f),
+            )
             else -> Canvas(Modifier.fillMaxSize()) {
                 val cw = size.width; val ch = size.height
                 if (card.rank == 14) {
-                    val s = cw * 0.46f
-                    drawSuit(card.suit, c, Offset((cw - s) / 2, (ch - s) / 2), s)
+                    val s = cw * 0.5f
+                    drawSuit(card.suit, c, Offset(cw * 0.56f - s / 2, ch * 0.55f - s / 2), s)
                 } else {
-                    val pip = cw * 0.19f
-                    val left = cw * 0.4f; val right = cw * 0.76f; val top = ch * 0.16f; val bottom = ch * 0.86f
+                    val pip = cw * 0.2f
+                    val left = cw * 0.42f; val right = cw * 0.8f; val top = ch * 0.17f; val bottom = ch * 0.86f
                     for ((x, y) in PIPS.getValue(card.rank)) {
                         val cx = left + (right - left) * x; val cy = top + (bottom - top) * y
                         drawSuit(card.suit, c, Offset(cx - pip / 2, cy - pip / 2), pip)
@@ -162,41 +163,45 @@ fun CardFace(card: Card, width: Dp, modifier: Modifier = Modifier, dim: Boolean 
                 }
             }
         }
-        CornerIndex(card, c, width, Modifier.align(Alignment.TopStart).padding(start = width * 0.045f, top = width * 0.03f))
-        if (dim) Box(Modifier.matchParentSize().background(Color(0x2E0A1A33)))
+        CornerIndex(card, c, width, Modifier.align(Alignment.TopStart).padding(start = width * 0.03f, top = width * 0.02f))
+        if (dim) Box(Modifier.matchParentSize().background(Color(0x330A1A33)))
     }
 }
 
 @Composable
 private fun CornerIndex(card: Card, c: Color, width: Dp, modifier: Modifier) {
     val w = width.value
-    Column(modifier.width(width * 0.22f), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier.width(width * 0.2f), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            card.rankLabel, color = c, fontSize = (w * if (card.rank == 10) 0.2f else 0.25f).sp, fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Serif, lineHeight = (w * 0.26f).sp, maxLines = 1, softWrap = false,
+            card.rankLabel, color = c, fontSize = (w * if (card.rank == 10) 0.25f else 0.32f).sp, fontFamily = Condensed,
+            lineHeight = (w * 0.32f).sp, maxLines = 1, softWrap = false, letterSpacing = (-0.5).sp,
         )
-        SuitIcon(card.suit, width * 0.15f)
+        SuitIcon(card.suit, width * 0.16f)
     }
 }
 
+/** Green-and-white plaid back, as in the original. */
 @Composable
 fun CardBack(width: Dp, modifier: Modifier = Modifier) {
     val h = width * CARD_RATIO
-    val shape = RoundedCornerShape(width * 0.08f)
-    Box(modifier.size(width, h).shadow(2.dp, shape).clip(shape).background(Color.White).padding(width * 0.06f)) {
-        Canvas(Modifier.matchParentSize().clip(RoundedCornerShape(width * 0.05f)).background(Color(0xFF2A5DA8))) {
-            val step = size.width / 4f
-            val line = Color(0x45FFFFFF)
-            var x = -size.height
-            while (x < size.width + size.height) {
-                drawLine(line, Offset(x, 0f), Offset(x + size.height, size.height), strokeWidth = 1.5f)
-                drawLine(line, Offset(x + size.height, 0f), Offset(x, size.height), strokeWidth = 1.5f)
-                x += step
+    val shape = RoundedCornerShape(width * 0.07f)
+    Box(modifier.size(width, h).shadow(2.dp, shape).clip(shape).background(Color.White).border(0.6.dp, Color(0xFFBDBDBD), shape).padding(width * 0.05f)) {
+        Canvas(Modifier.matchParentSize().clip(RoundedCornerShape(width * 0.04f)).background(Color(0xFFF4FAF6))) {
+            val unit = size.width / 5f
+            val wide = Pal.Plaid.copy(alpha = 0.45f)
+            val thin = Pal.Plaid.copy(alpha = 0.8f)
+            var x = 0f
+            while (x < size.width) {
+                drawRect(wide, Offset(x, 0f), androidx.compose.ui.geometry.Size(unit * 0.38f, size.height))
+                drawRect(thin, Offset(x + unit * 0.62f, 0f), androidx.compose.ui.geometry.Size(unit * 0.08f, size.height))
+                x += unit
             }
-            val s = size.width * 0.42f
-            drawCircle(Color.White, s * 0.62f, center)
-            drawCircle(Color(0xFFC8102E), s * 0.62f, center, style = Stroke(width = 2f))
-            drawSuit(Suit.HEARTS, Color(0xFFC8102E), Offset(center.x - s / 2, center.y - s / 2), s)
+            var y = 0f
+            while (y < size.height) {
+                drawRect(wide, Offset(0f, y), androidx.compose.ui.geometry.Size(size.width, unit * 0.38f))
+                drawRect(thin, Offset(0f, y + unit * 0.62f), androidx.compose.ui.geometry.Size(size.width, unit * 0.08f))
+                y += unit
+            }
         }
     }
 }

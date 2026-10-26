@@ -120,6 +120,10 @@ class PlaythroughTest {
 
     @Test fun playGamesThroughUi() {
         snap("menu")
+        rule.runOnUiThread { vm.tab = Tab.CREATE }; snap("create")
+        rule.runOnUiThread { vm.tab = Tab.FIND }; snap("find")
+        rule.runOnUiThread { vm.tab = Tab.RULES }; snap("rules")
+        rule.runOnUiThread { vm.tab = Tab.PROFILE }
         playOneGame(2, false, 11, "duel")
         playOneGame(4, true, 7, "four_transfer")
     }

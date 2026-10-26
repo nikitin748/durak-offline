@@ -2,30 +2,48 @@ package ru.durak.app
 
 import android.app.Application
 import android.content.Context
+import android.content.Intent
 import android.net.wifi.WifiManager
 import androidx.compose.runtime.*
+import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.collect
 import ru.durak.engine.*
 import ru.durak.net.*
+import java.io.File
 
-enum class Screen { MENU, HOST_LOBBY, FIND_ROOM, CLIENT_LOBBY, GAME }
+enum class Screen { HOME, HOST_LOBBY, CLIENT_LOBBY, GAME }
+enum class Tab { PROFILE, FIND, RULES, CREATE }
 
 data class StickerEvt(val seat: Int, val id: Int, val stamp: Long)
 
 class AppVm(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("durak", Context.MODE_PRIVATE)
 
-    var screen by mutableStateOf(Screen.MENU); private set
+    var screen by mutableStateOf(Screen.HOME); private set
+    var tab by mutableStateOf(Tab.PROFILE)
     var name by mutableStateOf(prefs.getString("name", "Игрок") ?: "Игрок"); private set
     var avatar by mutableIntStateOf(prefs.getInt("avatar", 0)); private set
-    var coins by mutableIntStateOf(prefs.getInt("coins", 100)); private set
+    var coins by mutableIntStateOf(prefs.getInt("coins", 1000)); private set
+
+    // "Создать игру" settings (remembered between launches)
+    var setPlayers by mutableIntStateOf(prefs.getInt("players", 2))
+    var setDeck by mutableIntStateOf(prefs.getInt("deck", 36))
+    var setTransfer by mutableStateOf(prefs.getBoolean("transfer", false))
+    var setNeighbors by mutableStateOf(prefs.getBoolean("neighbors", false))
+    var setFast by mutableStateOf(prefs.getBoolean("fast", false))
+    var setStake by mutableIntStateOf(prefs.getInt("stake", 100))
+    var setBotsOnly by mutableStateOf(prefs.getBoolean("botsOnly", false))
+
+    // statistics
+    var statGames by mutableIntStateOf(prefs.getInt("games", 0)); private set
+    var statFool by mutableIntStateOf(prefs.getInt("fool", 0)); private set
+    var statDraw by mutableIntStateOf(prefs.getInt("draw", 0)); private set
 
     var seats by mutableStateOf<List<SeatInfo>>(emptyList()); private set
     var rules by mutableStateOf(Rules()); private set
-    var seatCount by mutableIntStateOf(4); private set
+    var seatCount by mutableIntStateOf(2); private set
     var view by mutableStateOf<GameView?>(null); private set
     var mySeat by mutableIntStateOf(0); private set
     var toast by mutableStateOf<String?>(null); private set
@@ -34,6 +52,7 @@ class AppVm(app: Application) : AndroidViewModel(app) {
     var connecting by mutableStateOf(false); private set
     var isHost by mutableStateOf(false); private set
     var myAddresses by mutableStateOf<List<String>>(emptyList()); private set
+    var stake by mutableIntStateOf(100); private set
 
     private var session: GameSession? = null
     private var tcpHost: TcpHost? = null
@@ -50,7 +69,15 @@ class AppVm(app: Application) : AndroidViewModel(app) {
         prefs.edit().putString("name", name).putInt("avatar", avatar).apply()
     }
 
-    private fun saveCoins() = prefs.edit().putInt("coins", coins).apply()
+    fun saveSettings() {
+        setPlayers = setPlayers.coerceAtMost(Deck.maxPlayers(setDeck))
+        prefs.edit().putInt("players", setPlayers).putInt("deck", setDeck).putBoolean("transfer", setTransfer)
+            .putBoolean("neighbors", setNeighbors).putBoolean("fast", setFast).putInt("stake", setStake)
+            .putBoolean("botsOnly", setBotsOnly).apply()
+    }
+
+    private fun settingsRules() = Rules(transfer = setTransfer, deckSize = setDeck, neighborsOnly = setNeighbors)
+    private fun botDelay() = if (setFast) 350L..700L else 700L..1400L
 
     private fun acquireMulticast() {
         runCatching {
@@ -60,21 +87,29 @@ class AppVm(app: Application) : AndroidViewModel(app) {
     }
 
     // ---------- hosting ----------
+    /** "Быстрая игра": bots, saved settings. */
+    fun quickGame() = hostSolo(setPlayers.coerceAtLeast(2), setTransfer)
+
     fun hostSolo(players: Int, transfer: Boolean, seed: Long? = null) {
-        openHost(players, Rules(transfer = transfer), network = false, seed = seed)
+        val r = settingsRules().copy(transfer = transfer)
+        openHost(players.coerceAtMost(Deck.maxPlayers(r.deckSize)), r, network = false, seed = seed)
         session?.start()
     }
 
-    fun hostRoom() {
-        openHost(seatCount, rules, network = true)
+    /** "Создать" on the create-game screen. */
+    fun createGame() {
+        saveSettings()
+        if (setBotsOnly) { hostSolo(setPlayers, setTransfer); return }
+        openHost(setPlayers, settingsRules(), network = true)
         screen = Screen.HOST_LOBBY
     }
 
     private fun openHost(count: Int, r: Rules, network: Boolean, seed: Long? = null) {
         closeAll()
         isHost = true
-        seatCount = count; rules = r
+        seatCount = count; rules = r; stake = setStake
         val s = GameSession(viewModelScope, roomName = "$name: Дурак", random = if (seed != null) kotlin.random.Random(seed) else kotlin.random.Random.Default)
+        s.botDelayMs = botDelay()
         s.configure(count, r)
         session = s
         val local = LocalConnection(s, name, avatar)
@@ -93,7 +128,7 @@ class AppVm(app: Application) : AndroidViewModel(app) {
     }
 
     fun changeSeatCount(n: Int) { seatCount = n; session?.configure(n, rules) }
-    fun setTransfer(on: Boolean) { rules = rules.copy(transfer = on); session?.configure(seatCount, rules) }
+    fun setTransferRule(on: Boolean) { rules = rules.copy(transfer = on); session?.configure(seatCount, rules) }
     fun addBot() { session?.addBot() }
     fun removeBot(seat: Int) { session?.removeBot(seat) }
     fun startGame() { coinsPaid = false; session?.start() }
@@ -105,16 +140,11 @@ class AppVm(app: Application) : AndroidViewModel(app) {
     }
 
     // ---------- joining ----------
-    fun openFinder() {
-        closeAll()
-        screen = Screen.FIND_ROOM
+    fun startListening() {
+        if (listenJob?.isActive == true) return
         acquireMulticast()
         listenJob = viewModelScope.launch {
-            launch {
-                Discovery.listen().collect { ad ->
-                    seen["${ad.host}:${ad.port}"] = ad to System.currentTimeMillis()
-                }
-            }
+            launch { Discovery.listen().collect { ad -> seen["${ad.host}:${ad.port}"] = ad to System.currentTimeMillis() } }
             while (true) {
                 val now = System.currentTimeMillis()
                 rooms = seen.values.filter { now - it.second < 4000 }.map { it.first }.sortedBy { it.name }
@@ -123,10 +153,12 @@ class AppVm(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun stopListening() { listenJob?.cancel(); listenJob = null }
+
     fun joinRoom(host: String, port: Int = TCP_PORT) {
         if (connecting) return
         connecting = true
-        listenJob?.cancel()
+        stopListening()
         viewModelScope.launch {
             val c = TcpClient(viewModelScope)
             try {
@@ -134,8 +166,8 @@ class AppVm(app: Application) : AndroidViewModel(app) {
                 conn = c; isHost = false
                 collect(c)
             } catch (e: Exception) {
-                toast = "Не удалось подключиться: ${e.message}"
-                openFinder()
+                flash("Не удалось подключиться: ${e.message}")
+                startListening()
             } finally { connecting = false }
         }
     }
@@ -156,11 +188,12 @@ class AppVm(app: Application) : AndroidViewModel(app) {
                         val prev = view
                         view = m.view
                         mySeat = m.view.seat
-                        if (screen != Screen.GAME) { screen = Screen.GAME }
+                        if (screen != Screen.GAME) screen = Screen.GAME
                         if (m.view.gameOver && (prev == null || !prev.gameOver)) payout(m.view)
+                        if (!m.view.gameOver) coinsPaid = false
                     }
                     is ServerMsg.Sticker -> addSticker(m.seat, m.id)
-                    is ServerMsg.Error -> { android.util.Log.d("DurakUI", "server error ${m.text}"); flash(m.text) }
+                    is ServerMsg.Error -> flash(m.text)
                     is ServerMsg.Closed -> { flash(m.reason); leaveToMenu() }
                 }
             }
@@ -170,11 +203,16 @@ class AppVm(app: Application) : AndroidViewModel(app) {
     private fun payout(v: GameView) {
         if (coinsPaid) return
         coinsPaid = true
-        coins = if (v.loser == v.seat) (coins - 10).coerceAtLeast(0) else coins + 10
-        saveCoins()
+        statGames++
+        when (v.loser) {
+            null -> statDraw++
+            v.seat -> { statFool++; coins = (coins - stake).coerceAtLeast(0) }
+            else -> coins += stake
+        }
+        prefs.edit().putInt("coins", coins).putInt("games", statGames).putInt("fool", statFool).putInt("draw", statDraw).apply()
     }
 
-    fun act(a: Action) { android.util.Log.d("DurakUI", "act $a conn=$conn"); conn?.send(ClientMsg.Act(a)) }
+    fun act(a: Action) { conn?.send(ClientMsg.Act(a)) }
     fun sendSticker(id: Int) { conn?.send(ClientMsg.Sticker(id)) }
 
     private fun addSticker(seat: Int, id: Int) {
@@ -185,16 +223,33 @@ class AppVm(app: Application) : AndroidViewModel(app) {
 
     fun flash(text: String) {
         toast = text
-        viewModelScope.launch { delay(1600); if (toast == text) toast = null }
+        viewModelScope.launch { delay(1800); if (toast == text) toast = null }
+    }
+
+    /** Sends this app's own APK through Android's share sheet (Bluetooth, Nearby Share, messengers…). */
+    fun shareApk(ctx: Context) {
+        runCatching {
+            val src = File(ctx.applicationInfo.sourceDir)
+            val dir = File(ctx.cacheDir, "share").apply { mkdirs() }
+            val out = File(dir, "durak-offline.apk")
+            src.copyTo(out, overwrite = true)
+            val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".files", out)
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "application/vnd.android.package-archive"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            ctx.startActivity(Intent.createChooser(send, "Отправить игру").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }.onFailure { flash("Не получилось поделиться: ${it.message}") }
     }
 
     fun leaveToMenu() {
         closeAll()
-        screen = Screen.MENU
+        screen = Screen.HOME
     }
 
     private fun closeAll() {
-        collectJob?.cancel(); adJob?.cancel(); listenJob?.cancel()
+        collectJob?.cancel(); adJob?.cancel(); stopListening()
         runCatching { conn?.close() }
         tcpHost?.stop()
         multicastLock?.let { runCatching { it.release() } }

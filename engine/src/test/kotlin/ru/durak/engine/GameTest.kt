@@ -15,6 +15,28 @@ class GameTest {
         assertEquals(36, Deck.full36().toSet().size)
     }
 
+    @Test fun deckSizes() {
+        assertEquals(24, Deck.of(24).toSet().size)
+        assertEquals(52, Deck.of(52).toSet().size)
+        assertEquals(4, Deck.maxPlayers(24))
+        val g = Game.newGame(4, Rules(deckSize = 24), Random(3))
+        assertEquals(0, g.deckSize())
+        assertTrue((0 until 4).all { s -> g.hand(s).all { it.rank >= 9 } })
+    }
+
+    @Test fun neighborsOnlyBlocksFarPlayers() {
+        // 4 players: 0 attacks 1; neighbours of 1 are 0 and 2; seat 3 may not throw in.
+        val hands = listOf(cs("6C", "KD", "QD", "AH", "10D", "JD"), cs("8C", "9D", "8D", "7H", "QH", "8H"), cs("6D", "KC", "AC", "JC", "10H", "9H"), cs("6H", "7C", "7D", "QC", "JH", "9C"))
+        val g = Game.forTesting(hands, cs("6S", "7S"), Rules(neighborsOnly = true))
+        g.apply(0, Action.Attack(c("6C")))
+        assertTrue(c("6D") in g.attackCards(2))
+        assertTrue(g.attackCards(3).isEmpty())
+        assertIs<Result.Error>(g.apply(3, Action.Attack(c("6H"))))
+        val all = Game.forTesting(hands, cs("6S", "7S"), Rules(neighborsOnly = false))
+        all.apply(0, Action.Attack(c("6C")))
+        assertTrue(c("6H") in all.attackCards(3))
+    }
+
     @Test fun beatsRules() {
         assertTrue(c("8H").beats(c("7H"), Suit.SPADES))
         assertFalse(c("7H").beats(c("8H"), Suit.SPADES))
@@ -164,8 +186,9 @@ class GameTest {
     }
 
     @Test fun botsPlayFullGamesToCompletion() {
-        for (seed in 1..300) for (n in 2..6) for (tr in listOf(false, true)) {
-            val g = Game.newGame(n, Rules(transfer = tr), Random(seed * 31 + n))
+        for (seed in 1..120) for (deck in listOf(24, 36, 52)) for (n in 2..Deck.maxPlayers(deck)) for (tr in listOf(false, true)) {
+            val rules = Rules(transfer = tr, deckSize = deck, neighborsOnly = seed % 2 == 0)
+            val g = Game.newGame(n, rules, Random(seed * 31 + n))
             var steps = 0
             while (!g.gameOver) {
                 check(++steps < 5000) { "stuck: seed=$seed n=$n view=${g.viewFor(0)}" }
@@ -182,7 +205,7 @@ class GameTest {
                 check(acted) { "no bot action: seed=$seed n=$n waiting=$w" }
                 // card conservation
                 val total = (0 until n).sumOf { i -> g.hand(i).size } + g.deckSize() + (g.tableCards().size + g.tableCards().count { pr -> pr.defense != null }) + g.discardCount
-                assertEquals(36, total)
+                assertEquals(deck, total)
             }
         }
     }
