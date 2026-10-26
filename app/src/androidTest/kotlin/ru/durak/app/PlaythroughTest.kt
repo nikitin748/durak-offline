@@ -26,7 +26,10 @@ class PlaythroughTest {
     private var shotNo = 0
 
     private fun snap(name: String) {
-        Thread.sleep(700) // let animations settle
+        // The test clock drives Compose frames: advance it so the screen shows the current state.
+        rule.mainClock.advanceTimeBy(1200)
+        rule.waitForIdle()
+        Thread.sleep(300)
         val bmp = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot() ?: return
         val dir = File(rule.activity.getExternalFilesDir(null), "shots").apply { mkdirs() }
         FileOutputStream(File(dir, "%02d_%s.png".format(shotNo++, name))).use { bmp.compress(Bitmap.CompressFormat.PNG, 90, it) }
@@ -46,7 +49,7 @@ class PlaythroughTest {
     }
 
     private fun tapCard(c: Card) {
-        rule.onNodeWithTag("hand:$c").performTouchInput { click(Offset(width * 0.18f, height * 0.25f)) }
+        rule.onNodeWithTag("hand:$c").performTouchInput { click(Offset(width * 0.15f, height * 0.3f)) }
     }
 
     private fun dragCardTo(c: Card, targetTag: String?) {

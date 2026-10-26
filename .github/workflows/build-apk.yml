@@ -50,7 +50,7 @@ jobs:
           git config user.name "ci"; git config user.email "ci@example.com"
           git checkout --orphan ci-logs && git rm -rf . -q
           cp -r /tmp/out/* . 2>/dev/null || true
-          git add -A && git commit -m "CI output ${{ github.sha }}" --allow-empty -q && git push -f origin ci-logs
+          git add build.log instrument.log logcat.log shots 2>/dev/null; git commit -m "CI output ${{ github.sha }}" --allow-empty -q && git push -f origin ci-logs
       - name: Check UI test result
         run: |
           cat /tmp/out/instrument.log
