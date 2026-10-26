@@ -1,0 +1,7 @@
+--------- beginning of main
+10-26 18:56:47.978  2231  2323 I TestRunner: run started: 1 tests
+10-26 18:56:47.978  2231  2323 I TestRunner: started: playGamesThroughUi(ru.durak.app.PlaythroughTest)
+10-26 18:57:20.658  2231  2323 I Playthrough: duel: steps=28 tapDef=6 dragDef=3 attacks=9 takes=0 passes=10 loser=null
+10-26 18:58:16.765  2231  2323 I Playthrough: four_transfer: steps=48 tapDef=2 dragDef=1 attacks=4 takes=1 passes=40 loser=0
+10-26 18:58:17.928  2231  2323 I TestRunner: finished: playGamesThroughUi(ru.durak.app.PlaythroughTest)
+10-26 18:58:17.933  2231  2323 I TestRunner: run finished: 1 tests, 0 failed, 0 ignored

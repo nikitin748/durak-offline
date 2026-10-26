@@ -1,0 +1,11 @@
+
+ru.durak.app.PlaythroughTest:s_glBindAttribLocation: bind attrib 0 name position
+s_glBindAttribLocation: bind attrib 1 name color
+s_glBindAttribLocation: bind attrib 2 name localCoord
+.
+
+Time: 89.955
+
+OK (1 test)
+
+
