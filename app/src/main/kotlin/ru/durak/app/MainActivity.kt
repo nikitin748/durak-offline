@@ -9,7 +9,7 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
 
 class MainActivity : ComponentActivity() {
-    private val vm: AppVm by viewModels()
+    val vm: AppVm by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

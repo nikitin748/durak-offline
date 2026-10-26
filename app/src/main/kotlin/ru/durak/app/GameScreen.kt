@@ -27,6 +27,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -147,9 +148,9 @@ fun GameScreen(vm: AppVm) {
                 )
                 // action buttons, bottom right like the original
                 Column(Modifier.align(Alignment.BottomEnd).padding(end = 10.dp, bottom = 6.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (l.transfer.isNotEmpty()) ActionPill(if (transferMode) "Выберите карту" else "Перевести", Pal.Orange) { transferMode = !transferMode }
-                    if (l.canTake) ActionPill("Беру", Color(0xFFD9534F)) { vm.act(Action.Take) }
-                    else if (l.canPass) ActionPill(if (v.defenderTaking) "Пас" else if (v.table.none { it.defense == null }) "Бито" else "Пас", Pal.Green) { vm.act(Action.Pass) }
+                    if (l.transfer.isNotEmpty()) ActionPill(if (transferMode) "Выберите карту" else "Перевести", Pal.Orange, "btn:transfer") { transferMode = !transferMode }
+                    if (l.canTake) ActionPill("Беру", Color(0xFFD9534F), "btn:take") { vm.act(Action.Take) }
+                    else if (l.canPass) ActionPill(if (v.defenderTaking) "Пас" else if (v.table.none { it.defense == null }) "Бито" else "Пас", Pal.Green, "btn:pass") { vm.act(Action.Pass) }
                 }
                 vm.toast?.let { Toast(it) }
             }
@@ -201,9 +202,9 @@ private fun hintText(v: GameView, me: Int, info: (Int) -> SeatInfo): String {
 }
 
 @Composable
-fun ActionPill(text: String, color: Color, onClick: () -> Unit) {
+fun ActionPill(text: String, color: Color, tag: String = text, onClick: () -> Unit) {
     Box(
-        Modifier.clip(RoundedCornerShape(24.dp)).background(Brush.verticalGradient(listOf(color.copy(alpha = 0.95f), color))).border(2.dp, Color(0x99FFFFFF), RoundedCornerShape(24.dp))
+        Modifier.testTag(tag).clip(RoundedCornerShape(24.dp)).background(Brush.verticalGradient(listOf(color.copy(alpha = 0.95f), color))).border(2.dp, Color(0x99FFFFFF), RoundedCornerShape(24.dp))
             .clickable(onClick = onClick).padding(horizontal = 22.dp, vertical = 12.dp)
     ) { Text(text, color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp) }
 }
@@ -310,6 +311,7 @@ fun TableView(
                                 CardFace(
                                     p.attack, cw,
                                     Modifier
+                                        .testTag("attack:$i")
                                         .onGloballyPositioned { onTargetBounds(i, it.boundsInRoot()) }
                                         .rotate(-4f)
                                         .then(if (tapTargets && p.defense == null) Modifier.pointerInput(i) { detectTapGestures { onTapTarget(i) } } else Modifier),
@@ -376,6 +378,7 @@ private fun HandCard(
     Box(
         Modifier
             .offset(x = ax, y = ay)
+            .testTag("hand:$c")
             .zIndex(if (dragging) 10f else 0f)
             .onGloballyPositioned { bounds = it.boundsInRoot() }
             .graphicsLayer {

@@ -20,24 +20,48 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Rules engine tests
         run: ./gradlew :engine:test --no-daemon
-      - name: Build APK
-        run: ./gradlew :app:assembleDebug --no-daemon 2>&1 | tee build.log; test ${PIPESTATUS[0]} -eq 0
+      - name: Build APKs
         shell: bash
-      - name: Save build log to ci-logs branch
+        run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon 2>&1 | tee build.log; test ${PIPESTATUS[0]} -eq 0
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Play games through the UI on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            adb shell am instrument -w ru.durak.offline.test/androidx.test.runner.AndroidJUnitRunner > instrument.log 2>&1 || true
+            adb logcat -d -s Playthrough:I AndroidRuntime:E TestRunner:* > logcat.log || true
+            adb pull /sdcard/Android/data/ru.durak.offline/files/shots shots || true
+      - name: Save logs and screenshots to ci-logs branch
         if: always()
         run: |
+          mkdir -p /tmp/out && cp -r build.log instrument.log logcat.log shots /tmp/out/ 2>/dev/null || true
           git config user.name "ci"; git config user.email "ci@example.com"
-          mkdir /tmp/logs && cp build.log /tmp/logs/ 2>/dev/null || true
-          git checkout --orphan ci-logs && git rm -rf . -q && cp /tmp/logs/* . 2>/dev/null || true
-          git add build.log 2>/dev/null || true
-          git commit -m "build log" --allow-empty -q && git push -f origin ci-logs
+          git checkout --orphan ci-logs && git rm -rf . -q
+          cp -r /tmp/out/* . 2>/dev/null || true
+          git add -A && git commit -m "CI output ${{ github.sha }}" --allow-empty -q && git push -f origin ci-logs
+      - name: Check UI test result
+        run: |
+          cat /tmp/out/instrument.log
+          grep -q "^OK (" /tmp/out/instrument.log
       - name: Name the APK
         run: cp app/build/outputs/apk/debug/app-debug.apk durak-offline.apk
       - uses: actions/upload-artifact@v4
         with:
           name: durak-offline-apk
           path: durak-offline.apk
-      - name: Publish as the "latest" release (stable download link)
+      - name: Publish as the "latest" release (only when all tests passed)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

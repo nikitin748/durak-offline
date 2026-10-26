@@ -60,8 +60,8 @@ class AppVm(app: Application) : AndroidViewModel(app) {
     }
 
     // ---------- hosting ----------
-    fun hostSolo(players: Int, transfer: Boolean) {
-        openHost(players, Rules(transfer = transfer), network = false)
+    fun hostSolo(players: Int, transfer: Boolean, seed: Long? = null) {
+        openHost(players, Rules(transfer = transfer), network = false, seed = seed)
         session?.start()
     }
 
@@ -70,11 +70,11 @@ class AppVm(app: Application) : AndroidViewModel(app) {
         screen = Screen.HOST_LOBBY
     }
 
-    private fun openHost(count: Int, r: Rules, network: Boolean) {
+    private fun openHost(count: Int, r: Rules, network: Boolean, seed: Long? = null) {
         closeAll()
         isHost = true
         seatCount = count; rules = r
-        val s = GameSession(viewModelScope, roomName = "$name: Дурак")
+        val s = GameSession(viewModelScope, roomName = "$name: Дурак", random = if (seed != null) kotlin.random.Random(seed) else kotlin.random.Random.Default)
         s.configure(count, r)
         session = s
         val local = LocalConnection(s, name, avatar)
